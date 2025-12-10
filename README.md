@@ -17,3 +17,5 @@ usage: EfsPotatoMemshell <cmd|memshell> [pipe] [port]
   EfsPotatoMemshell "whoami" lsarpc
   EfsPotatoMemshell memshell efsrpc 8080
   EfsPotatoMemshell memshell          (使用默认设置)
+
+  ![image](https://github.com/user-attachments/assets/a30a9493-4a60-4fac-982d-1701f2468768)
