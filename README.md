@@ -18,3 +18,4 @@ usage: EfsPotatoMemshell <cmd|memshell> [pipe] [port]
   EfsPotatoMemshell memshell          (使用默认设置)
 
   ![image](https://github.com/user-attachments/assets/a30a9493-4a60-4fac-982d-1701f2468768)
+<img width="940" height="938" alt="image" src="https://github.com/user-attachments/assets/97acfd85-2d64-46e1-b400-4395be3ebe06" />
