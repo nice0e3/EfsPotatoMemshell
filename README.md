@@ -3,7 +3,6 @@
 
 
 EfsPotatoMemshell - 提权与内存马一体化工具
-Part of GMH's fuck Tools, Code By zcgonvh.
 CVE-2021-36942 + 内存马功能整合
 
 
